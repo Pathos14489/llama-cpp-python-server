@@ -4,15 +4,15 @@ Run via `python3 .\worker.py --model_path {model_path}` Model path should be the
 `--first_model {model_slug}` is optional and specifies the first model to run. If not specified, the alphabetically first model in the directory will be run. If specified, the model must be in the directory.
 
 ## Additional Arguments
-`--n_gpu_layers {int}` is optional and specifies the number of layers to run on the GPU. Default is 99.
-`--flash_attn {bool}` is optional and specifies whether to use the flash attention mechanism. Default is True.
-`--n_ctx {int}` is optional and specifies the context size. Default is 8192.
-`--host {str}` is optional and specifies the host to run the server on. Default is: 0.0.0.0
-`--port {int}` is optional and specifies the port to run the server on. Default is: 8000
-`--root_path {str}` is optional and specifies the root path for the server. Default is "".
-`--openapi_url {str}` is optional and specifies the URL for the OpenAPI JSON file. Default is "/openapi.json".
-`--docs_url {str}` is optional and specifies the URL for the Swagger UI. Default is "/docs".
-`--redoc_url {str}` is optional and specifies the URL for the ReDoc UI. Default is "/redoc".
+- `--n_gpu_layers {int}` is optional and specifies the number of layers to run on the GPU. Default is 99.
+- `--flash_attn {bool}` is optional and specifies whether to use the flash attention mechanism. Default is True.
+- `--n_ctx {int}` is optional and specifies the context size. Default is 8192.
+- `--host {str}` is optional and specifies the host to run the server on. Default is: 0.0.0.0
+- `--port {int}` is optional and specifies the port to run the server on. Default is: 8000
+- `--root_path {str}` is optional and specifies the root path for the server. Default is "".
+- `--openapi_url {str}` is optional and specifies the URL for the OpenAPI JSON file. Default is "/openapi.json".
+- `--docs_url {str}` is optional and specifies the URL for the Swagger UI. Default is "/docs".
+- `--redoc_url {str}` is optional and specifies the URL for the ReDoc UI. Default is "/redoc".
 
 ## Model Configuration File
 The model configuration file is a JSON file that is used to set the model's priority and paramters. The priority is used when using the `auto` model selection mode. The parameters are used to set the model's parameters. The parameters are the same as the command line arguments. The model configuration file should be named the same as the model with the extension `.json`. For example, if the model is named `model.gguf`, the configuration file should be named `model.json`.
