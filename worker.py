@@ -9,7 +9,7 @@ from starlette.concurrency import run_in_threadpool, iterate_in_threadpool
 from functools import partial
 import anyio
 import llama_cpp
-from llama_cpp import Llama, llama_free_model
+from llama_cpp import Llama
 from llama_cpp.llava_cpp import llava_eval_image_embed, llava_image_embed_make_with_bytes, clip_model_load, llava_image_embed_free, clip_free
 import json
 import argparse
@@ -22,7 +22,6 @@ from paddleocr import PaddleOCR
 import array
 import urllib.request
 import base64
-import uuid
 import io
 import asyncio
 
