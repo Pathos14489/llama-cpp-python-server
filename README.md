@@ -1,7 +1,7 @@
 ## How to Run
 
 Run via `python3 .\worker.py --model_path {model_path}` Model path should be the path to the GGUF file you want to run or a directory containing multiple GGUF files and JSON configuration files.
-`--first_model {model_slug}` is optional and specifies the first model to run. If not specified, the alphabetically first model in the directory will be run. If specified, the model must be in the directory.
+`--first_model {model_slug}` is optional and specifies the first model to run. If not specified, the alphabetically first model in the directory will be run. If specified, the model must be in the directory. The `model_slug` is the name of the model file without the extension. For example, if the model is named `model.gguf`, the `model_slug` is `model`.
 
 ## Additional Arguments
 - `--n_gpu_layers {int}` is optional and specifies the number of layers to run on the GPU. Default is 99.
