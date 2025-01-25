@@ -1,5 +1,3 @@
-OpenRouter Style Local Llama.cpp Worker
-
 ## How to Run
 
 Run via `python3 .\worker.py --model_path {model_path}` Model path should be the path to the GGUF file you want to run or a directory containing multiple GGUF files and JSON configuration files.
