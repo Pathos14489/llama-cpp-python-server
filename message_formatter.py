@@ -1,6 +1,7 @@
 from pydantic import BaseModel
 import json
-from typing import Optional
+from typing import Optional, Union
+
 class PromptStyle(BaseModel):
     stop: list[str] = ["<|eot_id|>","<|end_header_id|>"]
     banned_chars: list[str] = ["{", "}", "\"" ]
@@ -14,6 +15,28 @@ class PromptStyle(BaseModel):
     system_name: str = "system"
     user_name: str = "user"
     assistant_name: str = "assistant"
+
+class MessageTextContent(BaseModel):
+    type: str = "text"
+    text: Optional[str]
+
+class ImageUrl(BaseModel):
+    url: str
+
+class MessageImageURLContent(BaseModel):
+    type: str = "image_url"
+    url: Optional[str]
+    image_url: Optional[ImageUrl]
+
+class MessageImageBase64Content(BaseModel):
+    type: str = "image"
+    base64: Optional[str]
+
+class Message(BaseModel):
+    role: str
+    content: Union[str, list[dict]] # Union[MessageTextContent, MessageImageURLContent, MessageImageBase64Content]
+    name: Optional[str] = ""
+
 class MessageFormatter(): # Tokenizes(only availble for counting the tokens in a string presently for local_models), and parses and formats messages for use with the language model
     def __init__(self, prompt_style: Optional[PromptStyle] = None): # Initializes the message formatter with a prompt style
         if prompt_style == None:
@@ -33,6 +56,10 @@ class MessageFormatter(): # Tokenizes(only availble for counting the tokens in a
         self.system_name = ps.system_name
         self.user_name = ps.user_name
         self.assistant_name = ps.assistant_name
+
+    def _version(self): # Returns the version of the message formatter
+        """Returns the version of the message formatter"""
+        return "0.0.2"
         
     def new_message(self, content, role, name=None): # Parses a string into a message format with the name of the speaker
         """Parses a string into a message format with the name of the speaker"""
@@ -95,19 +122,33 @@ class MessageFormatter(): # Tokenizes(only availble for counting the tokens in a
         parsed_msg_part = parsed_msg_part.split("[content]")[1]
         return parsed_msg_part
 
-    def get_string_from_messages(self, messages): # Returns a formatted string from a list of messages
+    def get_string_from_messages(self, messages: list[Message]): # Returns a formatted string from a list of messages
         """Returns a formatted string from a list of messages"""
         context = ""
+        images = []
         print(f"Creating string from messages: {len(messages)}")
         for message in messages:
             # print(f"Message:",message)
-            if "content" in message:
-                content = message["content"]
+            # if "content" in message:
+            #     content = message["content"]
+            # else:
+            #     try:
+            #         content = message.content
+            #     except:
+            #         raise ValueError("Message does not have 'content' key!")
+            if type(message.content) == str:
+                content = message.content
             else:
-                try:
-                    content = message.content
-                except:
-                    raise ValueError("Message does not have 'content' key!")
+                content = ""
+                for content_item in message.content:
+                    if content_item["type"] == "text":
+                        content += content_item["text"]
+                    elif content_item["type"] == "image_url":
+                        content += "{image}"
+                        images.append(content_item)
+                    elif content_item["type"] == "image":
+                        content += "{image}"
+                        images.append(content_item)
             if "role" in message:
                 role = message["role"]
             else:
@@ -124,7 +165,7 @@ class MessageFormatter(): # Tokenizes(only availble for counting the tokens in a
                     name = None
             msg_string = self.new_message(content, role, name)
             context += msg_string
-        return context
+        return context, images
     
     def __str__(self):
         return json.dumps(self._prompt_style.model_dump(), indent=4)
