@@ -1,4 +1,4 @@
-from message_formatter import MessageFormatter, PromptStyle
+from message_formatter import MessageFormatter, PromptStyle, Message
 from fastapi import FastAPI, Request
 from pydantic import BaseModel
 from typing import Optional, Iterator, Union
@@ -43,6 +43,7 @@ def PIL_image_to_base64(image: Image) -> str:
     return image_base64
 
 def image_url_to_bytes(image_url: str) -> bytes: # Loads an image from a URL or base64 data url and returns the bytes
+    print("Image URL to Bytes:",image_url)
     if image_url.startswith("data:"):
         image_bytes = base64.b64decode(image_url.split(",")[1])
         return image_bytes
@@ -264,10 +265,20 @@ async def get_event_publisher(
                 print(f"Disconnected from client (via refresh/close) {request.client}")
                 raise e
 
-class Message(BaseModel):
-    role: str
-    content: str
-    name: Optional[str] = ""
+def get_images_from_objects(objects):
+    images = []
+    for obj in objects:
+        if obj["type"] == "image":
+            images.append(bytes_to_PIL_image(base64.b64decode(obj["base64"].split(",")[1])))
+        elif obj["type"] == "image_url":
+            if "url" in obj:
+                images.append(bytes_to_PIL_image(image_url_to_bytes(obj["url"])))
+            elif "image_url" in obj:
+                if "url" in obj["image_url"]:
+                    images.append(bytes_to_PIL_image(image_url_to_bytes(obj["image_url"]["url"])))
+                else:
+                    images.append(bytes_to_PIL_image(image_url_to_bytes(obj["image_url"])))
+    return images
 
 class ResponseFormat(BaseModel):
     type: str
@@ -275,7 +286,6 @@ class ResponseFormat(BaseModel):
 
 class ChatCompletionsRequest(BaseModel):
     messages: list[Message]
-    images: Optional[list[str]] = [] # List of image URLs/base64 strings
     ocr_resolution: Optional[int] = 256
     image_resolution: Optional[int] = 1152
     resize_image: Optional[bool] = False
@@ -295,6 +305,7 @@ class ChatCompletionsRequest(BaseModel):
     priority: Optional[int] = 99
     grammar: Optional[Union[dict, str]] = None
     response_format: Optional[ResponseFormat] = None
+    transform: Optional[list[str]] = ["middle-out"]
     prefill: Optional[str] = None
 
 class CompletionsRequest(BaseModel):
@@ -554,6 +565,15 @@ if __name__ == "__main__":
             # load_model(models[0])
             asyncio.run(load_model(models[0]))
     api = FastAPI(title="🦙 llama-cpp-python Customized API", root_path=kwargs["root_path"], openapi_url=kwargs["openapi_url"], docs_url=kwargs["docs_url"], redoc_url=kwargs["redoc_url"])
+    from fastapi.middleware.cors import CORSMiddleware
+
+    api.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
     
 @api.post("/v1/completions", tags=["OpenAI V1"])
 @api.post("/v1/engines/copilot-codex/completions",tags=["Copilot Codex V1"])
@@ -665,7 +685,7 @@ async def embeddings(body: EmbeddingsRequest) -> list[float]:
     return llama.create_embedding(body.strings)
 
 @api.post("/v1/chat/completions", tags=["OpenAI V1"])
-async def completions(
+async def chat_completions(
     request: Request,
     body: ChatCompletionsRequest):
     global formatter
@@ -674,13 +694,10 @@ async def completions(
     global last_model
     global default_formatter
     global loaded_formatter
-    images = body.images
     ocr_resolution = body.ocr_resolution
     image_resolution = body.image_resolution
     resize_image = body.resize_image
     modalities = ["text"]
-    if len(images) > 0:
-        modalities.append("image")
     if body.prompt_style:
         formatter = MessageFormatter(prompt_style=body.prompt_style)
     else:
@@ -688,21 +705,34 @@ async def completions(
             formatter = loaded_formatter
         else:
             formatter = default_formatter
-    prompt = formatter.get_string_from_messages(body.messages)
-    prompt += formatter.start_message(body.response_type)
-    if body.prefill and body.prefill.strip() != "":
-        prompt += body.prefill
+    prompt, images_objects = formatter.get_string_from_messages(body.messages)
+    # print("Prompt:",prompt)
+    # print("Images:",images_objects)
+    if len(images_objects) > 0:
+        modalities.append("image")
     token_length = len(llama.tokenize(prompt.encode("utf-8"))) # Tokenize with currently loaded model to figure out if we need to load a new model
     print("Requested Model:",body.model)
     if body.model and body.model != "" and (body.model in models or body.model == "auto") and body.model != last_model:
         print("Loading model", body.model)
         await load_model(body.model,input_modalities=modalities,priority=body.priority,token_length=token_length) # Load the model if it's not already loaded
-    new_images = []
-    for image in images:
-        image_bytes = image_url_to_bytes(image) # Load the image from the URL/base64 string and get the bytes
-        image = bytes_to_PIL_image(image_bytes) # Convert the bytes to a PIL image
-        new_images.append(image)
-    images = new_images
+    model_options = get_model_options(last_model)
+    response_type = body.response_type
+    if response_type == "user" and "prompt_style" in model_options and model_options["prompt_style"] != None and model_options["prompt_style"]["user_name"] != None:
+        response_type = model_options["prompt_style"]["user_name"]
+    elif response_type == "assistant" and "prompt_style" in model_options and model_options["prompt_style"] != None and model_options["prompt_style"]["assistant_name"] != None:
+        response_type = model_options["prompt_style"]["assistant_name"]
+    elif response_type == "system" and "prompt_style" in model_options and model_options["prompt_style"] != None and model_options["prompt_style"]["system_name"] != None:
+        response_type = model_options["prompt_style"]["system_name"]
+    prompt += formatter.start_message(response_type)
+    if body.prefill and body.prefill.strip() != "":
+        prompt += body.prefill
+    images = get_images_from_objects(images_objects)
+    # new_images = []
+    # for image in images:
+    #     image_bytes = image_url_to_bytes(image) # Load the image from the URL/base64 string and get the bytes
+    #     image = bytes_to_PIL_image(image_bytes) # Convert the bytes to a PIL image
+    #     new_images.append(image)
+    # images = new_images
     if len(images) > 0:
         prompt, ascii_blocks = multimodal_prompt_format(prompt, images, ocr_resolution, image_resolution, resize_image)
         ocr_count = prompt.count("{ocr}")
@@ -721,6 +751,10 @@ async def completions(
     else:
         grammar = None
     
+    stops = formatter.stop + body.stops + body.stops
+    if "prompt_style" in model_options and model_options["prompt_style"] != None and model_options["prompt_style"]["stop"] != None:
+        stops += model_options["prompt_style"]["stop"]
+    print("Stops:",stops)
     keyword_args = dict(
         prompt=prompt,
         max_tokens=body.max_tokens,
@@ -740,7 +774,6 @@ async def completions(
 
     async with model_lock:
         iterator_or_completion: Union[llama_cpp.ChatCompletion, Iterator[llama_cpp.ChatCompletionChunk]] = await run_in_threadpool(llama.create_completion, **keyword_args)
-        
         if isinstance(iterator_or_completion, Iterator):
             def chat_wrapper(iterator: Iterator[llama_cpp.ChatCompletionChunk]):
                 for chunk in iterator:
@@ -813,7 +846,7 @@ async def completions(
                     "index": choice["index"],
                     "message": {
                         "content": choice["text"],
-                        "role": formatter.assistant_name,
+                        "role": response_type,
                     },
                     "logprobs": choice["logprobs"],
                     "finish_reason": choice["finish_reason"],
