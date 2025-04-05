@@ -269,7 +269,10 @@ def get_images_from_objects(objects):
     images = []
     for obj in objects:
         if obj["type"] == "image":
-            images.append(bytes_to_PIL_image(base64.b64decode(obj["base64"].split(",")[1])))
+            try:
+                images.append(bytes_to_PIL_image(base64.b64decode(obj["base64"].split(",")[1])))
+            except Exception as e:
+                images.append(bytes_to_PIL_image(base64.b64decode(obj["base64"])))
         elif obj["type"] == "image_url":
             if "url" in obj:
                 images.append(bytes_to_PIL_image(image_url_to_bytes(obj["url"])))
