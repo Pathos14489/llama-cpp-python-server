@@ -60,7 +60,7 @@ def url_to_PIL_image(image_url: str) -> Image: # Loads an image from a URL or ba
 def bytes_to_PIL_image(image_bytes: bytes) -> Image: # Converts bytes to a PIL image
     return Image.open(io.BytesIO(image_bytes))
         
-def get_image_embed_from_bytes(image_bytes,n_threads=1):
+def get_image_embed_from_bytes(image_bytes:bytes, n_threads=1):
     global clip_model
     data_array = array.array("B", image_bytes)
     c_ubyte_ptr = (
@@ -270,7 +270,10 @@ def get_images_from_objects(objects):
     for obj in objects:
         if obj["type"] == "image":
             try:
-                images.append(bytes_to_PIL_image(base64.b64decode(obj["base64"].split(",")[1])))
+                if len(obj["base64"].split(",")) > 1:
+                    images.append(bytes_to_PIL_image(base64.b64decode(obj["base64"].split(",")[1])))
+                else:
+                    images.append(bytes_to_PIL_image(base64.b64decode(obj["base64"])))
             except Exception as e:
                 images.append(bytes_to_PIL_image(base64.b64decode(obj["base64"])))
         elif obj["type"] == "image_url":
@@ -300,6 +303,7 @@ class ChatCompletionsRequest(BaseModel):
     repeat_penalty: Optional[float] = 1.1
     frequency_penalty: Optional[float] = 0.0
     presence_penalty: Optional[float] = 0.0
+    stop: Optional[list[str]] = []
     stops: Optional[list[str]] = []
     stream: Optional[bool] = False
     response_type: Optional[str] = "assistant"
@@ -630,9 +634,15 @@ async def completions(request: Request, body: CompletionsRequest) -> llama_cpp.C
     elif body.response_format and type(body.response_format) != None:
         print("Response format:",body.response_format)
         if body.response_format.type == "json_schema":
-            grammar = llama_cpp.LlamaGrammar.from_json_schema(json.dumps(body.response_format.json_schema))
+            if type(body.response_format.json_schema) == dict:
+                grammar = llama_cpp.LlamaGrammar.from_json_schema(json.dumps(body.response_format.json_schema))
+            elif type(body.response_format.json_schema) == str:
+                grammar = llama_cpp.LlamaGrammar.from_string(body.response_format.json_schema)
+            else:
+                print("Error: Grammar is not a valid type")
     else:
         print("No grammar found")
+    print("Grammar:",grammar)
     async with model_lock:
         iterator_or_completion = llama.create_completion(
             prompt,
@@ -701,13 +711,15 @@ async def chat_completions(
     image_resolution = body.image_resolution
     resize_image = body.resize_image
     modalities = ["text"]
-    if body.prompt_style:
-        formatter = MessageFormatter(prompt_style=body.prompt_style)
+    if loaded_formatter:
+        formatter = loaded_formatter
+        print(f"Loaded formatter for model '{last_model}':",formatter)
     else:
-        if loaded_formatter:
-            formatter = loaded_formatter
-        else:
-            formatter = default_formatter
+        formatter = default_formatter
+        print("Default formatter:",formatter)
+    if body.prompt_style:
+        print("Body contained prompt style:",body.prompt_style)
+        formatter = MessageFormatter(prompt_style=body.prompt_style)
     prompt, images_objects = formatter.get_string_from_messages(body.messages)
     # print("Prompt:",prompt)
     # print("Images:",images_objects)
@@ -749,12 +761,20 @@ async def chat_completions(
         grammar = llama_cpp.LlamaGrammar.from_string(body.grammar)
     elif body.response_format and type(body.response_format) != None:
         print("Response format:",body.response_format)
-        if body.response_format.type == "json_schema":
+        if type(body.response_format.json_schema) == dict:
             grammar = llama_cpp.LlamaGrammar.from_json_schema(json.dumps(body.response_format.json_schema))
+        elif type(body.response_format.json_schema) == str:
+            grammar = llama_cpp.LlamaGrammar.from_string(body.response_format.json_schema)
+        else:
+            print("Error: Grammar is not a valid type")
+        # if body.response_format.type == "json_schema":
+        #     grammar = llama_cpp.LlamaGrammar.from_json_schema(json.dumps(body.response_format.json_schema))
     else:
         grammar = None
+    print("Grammar:",grammar)
     
-    stops = formatter.stop + body.stops + body.stops
+    stops = formatter.stop + body.stop + body.stops
+    stops = list(set(stops))
     if "prompt_style" in model_options and model_options["prompt_style"] != None and model_options["prompt_style"]["stop"] != None:
         stops += model_options["prompt_style"]["stop"]
     print("Stops:",stops)
