@@ -1,0 +1,8 @@
+pydantic
+fastapi
+uvicorn
+se_starlette
+anyio
+starlette
+functools
+llama_cpp_python
