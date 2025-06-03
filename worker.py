@@ -644,6 +644,10 @@ async def completions(request: Request, body: CompletionsRequest) -> llama_cpp.C
         print("No grammar found")
     print("Grammar:",grammar)
     async with model_lock:
+        if llama is None:
+            load_model("auto", input_modalities=input_modalities, priority=body.priority, token_length=token_length) # Load the model if it's not already loaded
+        if llama is None:
+            raise ValueError("No model loaded, please load a model before making a request")
         iterator_or_completion = llama.create_completion(
             prompt,
             max_tokens=body.max_tokens,
@@ -731,14 +735,14 @@ async def chat_completions(
         print("Loading model", body.model)
         await load_model(body.model,input_modalities=modalities,priority=body.priority,token_length=token_length) # Load the model if it's not already loaded
     model_options = get_model_options(last_model)
-    response_type = body.response_type
-    if response_type == "user" and "prompt_style" in model_options and model_options["prompt_style"] != None and model_options["prompt_style"]["user_name"] != None:
-        response_type = model_options["prompt_style"]["user_name"]
-    elif response_type == "assistant" and "prompt_style" in model_options and model_options["prompt_style"] != None and model_options["prompt_style"]["assistant_name"] != None:
-        response_type = model_options["prompt_style"]["assistant_name"]
-    elif response_type == "system" and "prompt_style" in model_options and model_options["prompt_style"] != None and model_options["prompt_style"]["system_name"] != None:
-        response_type = model_options["prompt_style"]["system_name"]
-    prompt += formatter.start_message(response_type)
+    # response_type = body.response_type
+    # if response_type == "user" and "prompt_style" in model_options and model_options["prompt_style"] != None and model_options["prompt_style"]["user_name"] != None:
+    #     response_type = model_options["prompt_style"]["user_name"]
+    # elif response_type == "assistant" and "prompt_style" in model_options and model_options["prompt_style"] != None and model_options["prompt_style"]["assistant_name"] != None:
+    #     response_type = model_options["prompt_style"]["assistant_name"]
+    # elif response_type == "system" and "prompt_style" in model_options and model_options["prompt_style"] != None and model_options["prompt_style"]["system_name"] != None:
+    #     response_type = model_options["prompt_style"]["system_name"]
+    prompt += formatter.start_message(body.response_type)
     if body.prefill and body.prefill.strip() != "":
         prompt += body.prefill
     images = get_images_from_objects(images_objects)
@@ -818,7 +822,7 @@ async def chat_completions(
                             "index": choice["index"],
                             "message": {
                                 "content": choice["text"],
-                                "role": formatter.assistant_name,
+                                "role": "assistant",
                                 "name": ""
                             },
                             "logprobs": choice["logprobs"],

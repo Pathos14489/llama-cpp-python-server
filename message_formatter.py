@@ -2,6 +2,11 @@ from pydantic import BaseModel
 import json
 from typing import Optional, Union
 
+class MessageRole(BaseModel):
+    role_name: str = "assistant"
+    role_prefix_insert: str = "<|assistant_id|>"
+    role_suffix_insert: str = "<|eot_id|>"
+
 class PromptStyle(BaseModel):
     stop: list[str] = ["<|eot_id|>","<|end_header_id|>"]
     banned_chars: list[str] = ["{", "}", "\"" ]
@@ -11,13 +16,19 @@ class PromptStyle(BaseModel):
     message_signifier: str = ": "
     role_seperator: str = "<|end_header_id|>\n\n"
     message_seperator: str = ""
-    message_format: str = "[BOS_token][role][role_seperator][name][message_signifier][content][specific_EOS_token][EOS_token][message_seperator]"
-    system_name: str = "system"
-    user_name: str = "user"
-    assistant_name: str = "assistant"
-    system_EOS_token: str = ""
-    user_EOS_token: str = ""
-    assistant_EOS_token: str = ""
+    message_format: str = "[BOS_token][role_prefix_insert][role_seperator][name][message_signifier][content][role_suffix_insert][EOS_token][message_seperator]"
+    chat_format: str = "[messages]"
+    # system_name: str = "system"
+    # user_name: str = "user"
+    # assistant_name: str = "assistant"
+    # system_EOS_token: str = ""
+    # user_EOS_token: str = ""
+    # assistant_EOS_token: str = ""
+    message_roles: list[MessageRole] = [
+        MessageRole(role_name="system", role_prefix_insert="system", role_suffix_insert=""),
+        MessageRole(role_name="user", role_prefix_insert="user", role_suffix_insert=""),
+        MessageRole(role_name="assistant", role_prefix_insert="assistant", role_suffix_insert="")
+    ]
 
 class MessageTextContent(BaseModel):
     type: str = "text"
@@ -56,16 +67,32 @@ class MessageFormatter(): # Tokenizes(only availble for counting the tokens in a
         self.role_seperator = ps.role_seperator
         self.message_seperator = ps.message_seperator
         self.message_format = ps.message_format
-        self.system_name = ps.system_name
-        self.user_name = ps.user_name
-        self.assistant_name = ps.assistant_name
-        self.system_EOS_token = ps.system_EOS_token
-        self.user_EOS_token = ps.user_EOS_token
-        self.assistant_EOS_token = ps.assistant_EOS_token
+        self.chat_format = ps.chat_format
+        # self.system_name = ps.system_name
+        # self.user_name = ps.user_name
+        # self.assistant_name = ps.assistant_name
+        # self.system_EOS_token = ps.system_EOS_token
+        # self.user_EOS_token = ps.user_EOS_token
+        # self.assistant_EOS_token = ps.assistant_EOS_token
+        self.message_roles = ps.message_roles
 
     def _version(self): # Returns the version of the message formatter
         """Returns the version of the message formatter"""
-        return "0.0.4"
+        return "0.0.5"
+    
+    def get_role_prefix(self, role: str) -> str: # Returns the prefix for a role
+        """Returns the prefix for a role"""
+        for message_role in self.message_roles:
+            if message_role.role_name == role:
+                return message_role.role_prefix_insert
+        raise ValueError(f"Role '{role}' not found in message roles:", self.message_roles)
+    
+    def get_role_suffix(self, role: str) -> str: # Returns the suffix for a role
+        """Returns the suffix for a role"""
+        for message_role in self.message_roles:
+            if message_role.role_name == role:
+                return message_role.role_suffix_insert
+        raise ValueError(f"Role {role} not found in message roles")
         
     def new_message(self, content, role, name=None): # Parses a string into a message format with the name of the speaker
         """Parses a string into a message format with the name of the speaker"""
@@ -95,25 +122,25 @@ class MessageFormatter(): # Tokenizes(only availble for counting the tokens in a
         if role == "":
             parsed_msg_part = parsed_msg_part.split("[role_seperator]")[0]
         parsed_msg_part = parsed_msg_part.replace("[BOS_token]",self.BOS_token)
-        formatted_roled = ""
-        if role == "system":
-            formatted_roled = self.system_name
-        elif role == "user":
-            formatted_roled = self.user_name
-        elif role == "assistant":
-            formatted_roled = self.assistant_name
-        parsed_msg_part = parsed_msg_part.replace("[role]",formatted_roled)
+        # formatted_roled = ""
+        # if role == "system":
+        #     formatted_roled = self.system_name
+        # elif role == "user":
+        #     formatted_roled = self.user_name
+        # elif role == "assistant":
+        #     formatted_roled = self.assistant_name
+        parsed_msg_part = parsed_msg_part.replace("[role_prefix_insert]",self.get_role_prefix(role))
         parsed_msg_part = parsed_msg_part.replace("[role_seperator]",role_sep)
         parsed_msg_part = parsed_msg_part.replace("[name]",name)
         parsed_msg_part = parsed_msg_part.replace("[message_signifier]",msg_sig)
-        specific_EOS_token = ""
-        if role == "system":
-            specific_EOS_token = self.system_EOS_token
-        elif role == "user":
-            specific_EOS_token = self.user_EOS_token
-        elif role == "assistant":
-            specific_EOS_token = self.assistant_EOS_token
-        parsed_msg_part = parsed_msg_part.replace("[specific_EOS_token]",specific_EOS_token)
+        # specific_EOS_token = ""
+        # if role == "system":
+        #     specific_EOS_token = self.system_EOS_token
+        # elif role == "user":
+        #     specific_EOS_token = self.user_EOS_token
+        # elif role == "assistant":
+        #     specific_EOS_token = self.assistant_EOS_token
+        parsed_msg_part = parsed_msg_part.replace("[role_suffix_insert]",self.get_role_suffix(role))
         parsed_msg_part = parsed_msg_part.replace("[EOS_token]",self.EOS_token)
         parsed_msg_part = parsed_msg_part.replace("[message_seperator]",self.message_seperator)
         parsed_msg_part = parsed_msg_part.split("[content]")[0]
@@ -135,25 +162,25 @@ class MessageFormatter(): # Tokenizes(only availble for counting the tokens in a
         if role == "":
             parsed_msg_part = parsed_msg_part.split("[role_seperator]")[1]
         parsed_msg_part = parsed_msg_part.replace("[BOS_token]",self.BOS_token)
-        formatted_roled = ""
-        if role == "system":
-            formatted_roled = self.system_name
-        elif role == "user":
-            formatted_roled = self.user_name
-        elif role == "assistant":
-            formatted_roled = self.assistant_name
-        parsed_msg_part = parsed_msg_part.replace("[role]",formatted_roled)
+        # formatted_roled = ""
+        # if role == "system":
+        #     formatted_roled = self.system_name
+        # elif role == "user":
+        #     formatted_roled = self.user_name
+        # elif role == "assistant":
+        #     formatted_roled = self.assistant_name
+        parsed_msg_part = parsed_msg_part.replace("[role_prefix_insert]",self.get_role_prefix(role))
         parsed_msg_part = parsed_msg_part.replace("[role_seperator]",role_sep)
         parsed_msg_part = parsed_msg_part.replace("[name]",name)
         parsed_msg_part = parsed_msg_part.replace("[message_signifier]",msg_sig)
-        specific_EOS_token = ""
-        if role == "system":
-            specific_EOS_token = self.system_EOS_token
-        elif role == "user":
-            specific_EOS_token = self.user_EOS_token
-        elif role == "assistant":
-            specific_EOS_token = self.assistant_EOS_token
-        parsed_msg_part = parsed_msg_part.replace("[specific_EOS_token]",specific_EOS_token)
+        # specific_EOS_token = ""
+        # if role == "system":
+        #     specific_EOS_token = self.system_EOS_token
+        # elif role == "user":
+        #     specific_EOS_token = self.user_EOS_token
+        # elif role == "assistant":
+        #     specific_EOS_token = self.assistant_EOS_token
+        parsed_msg_part = parsed_msg_part.replace("[role_suffix_insert]",self.get_role_suffix(role))
         parsed_msg_part = parsed_msg_part.replace("[EOS_token]",self.EOS_token)
         parsed_msg_part = parsed_msg_part.replace("[message_seperator]",self.message_seperator)
         parsed_msg_part = parsed_msg_part.split("[content]")[1]
@@ -163,9 +190,10 @@ class MessageFormatter(): # Tokenizes(only availble for counting the tokens in a
     def get_string_from_messages(self, messages: list[Message]): # Returns a formatted string from a list of messages
         """Returns a formatted string from a list of messages"""
         print(f"Using message format: {self.message_format}")
-        context = ""
+        context = f"{self.chat_format}"
         images = []
         print(f"Creating string from messages: {len(messages)}")
+        messages_context = ""
         for message in messages:
             # print(f"Message:",message)
             # if "content" in message:
@@ -203,7 +231,8 @@ class MessageFormatter(): # Tokenizes(only availble for counting the tokens in a
                 except:
                     name = None
             msg_string = self.new_message(content, role, name)
-            context += msg_string
+            messages_context += msg_string
+        context = context.replace("[messages]", messages_context)
         print(f"Context:")
         print(context)
         return context, images
