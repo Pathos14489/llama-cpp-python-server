@@ -1,8 +1,7 @@
 pydantic
 fastapi
 uvicorn
-se_starlette
+sse-starlette
 anyio
 starlette
-functools
 llama_cpp_python
